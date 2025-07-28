@@ -3,6 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import Razorpay from "razorpay";
 import crypto from "crypto";
+import { dbConnect } from "./helpers/dbConnect.js";
+import Payment from "./models/Payment.js";
 
 dotenv.config();
 
@@ -62,8 +64,13 @@ app.post("/api/create-order", async (req, res) => {
 // Verify payment
 app.post("/api/verify-payment", async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
-      req.body;
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      user,
+      amount,
+    } = req.body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({
@@ -85,21 +92,26 @@ app.post("/api/verify-payment", async (req, res) => {
     const isAuthentic = expectedSignature === razorpay_signature;
 
     if (isAuthentic) {
-      // Payment is verified
-      // Here you can save payment details to database
-      console.log("Payment verified successfully:", {
-        order_id: razorpay_order_id,
-        payment_id: razorpay_payment_id,
+      await Payment.create({
+        user, // expects { name, email, phone }
+        razorpay_order_id,
+        razorpay_payment_id,
+        razorpay_signature,
+        amount,
+        status: "success",
       });
+
+      console.log("Payment verified & saved to DB");
 
       res.json({
         success: true,
-        message: "Payment verified successfully",
+        message: "Payment verified and saved to database",
       });
     } else {
       res.status(400).json({
         success: false,
         error: "Payment verification failed",
+        details: error.message,
       });
     }
   } catch (error) {
@@ -131,6 +143,6 @@ app.get("/api/payment/:paymentId", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+dbConnect().then(() => {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 });
